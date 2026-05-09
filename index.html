@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>TENJINCA - 聖史の継承（デッキ制限版）</title>
+    <style>
+        :root { --fire: #ff5252; --water: #2196f3; --wood: #4caf50; --gold: #d4af37; }
+        body { font-family: sans-serif; background: #263238; margin: 0; padding: 5px; color: white; user-select: none; }
+        .game-container { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 5px; }
+        .row { display: flex; gap: 5px; justify-content: center; width: 100%; }
+        .zone { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; position: relative; padding: 22px 5px 5px; min-height: 120px; display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; align-items: center; }
+        .zone::before { content: attr(data-label); position: absolute; top: 3px; left: 8px; font-size: 10px; color: #ccc; font-weight: bold; }
+        .stg-zone { flex: 4; background: rgba(0,0,0,0.2); }
+        .hand-zone { flex: 5; background: rgba(0,0,0,0.3); border: 1px solid var(--gold); }
+        .stack-zone { width: 85px; flex: none; display: flex; justify-content: center; align-items: center; }
+        .card { width: 75px; height: 110px; border: 2px solid #333; border-radius: 5px; background: #fff; color: #333; cursor: pointer; position: relative; overflow: hidden; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); }
+        .card.done { filter: grayscale(1) brightness(0.6); }
+        .card-info { padding: 2px; font-size: 8px; text-align: center; font-weight: bold; line-height: 1.2; }
+        .card-cost { position: absolute; top: 1px; left: 1px; background: #000; color: #fff; border-radius: 50%; width: 16px; height: 16px; font-size: 10px; display: flex; align-items: center; justify-content: center; border: 1px solid #fff; z-index: 5;}
+        .card-rare { position: absolute; top: 1px; right: 1px; font-size: 8px; color: var(--gold); background: rgba(0,0,0,0.8); padding: 0 2px; border-radius: 2px; z-index: 5;}
+        .stack-count { position: absolute; bottom: 5px; right: 5px; background: rgba(0,0,0,0.8); color: gold; padding: 2px 5px; border-radius: 4px; font-size: 10px; font-weight: bold; }
+        .wall-card { background: #78909c !important; color: white !important; display: flex; align-items: center; justify-content: center; font-size: 10px; }
+        #log-area { background: #000; color: #0f0; padding: 8px; border-radius: 5px; font-size: 12px; height: 35px; display: flex; align-items: center; justify-content: center; border: 1px solid #0f0; text-align: center; }
+        .controls { display: flex; gap: 10px; align-items: center; padding: 5px; background: #37474f; border-radius: 8px; }
+        #menu-box { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; color: #333; border-radius: 10px; padding: 15px; width: 260px; z-index: 1000; display: none; box-shadow: 0 0 50px rgba(0,0,0,0.8); }
+        .m-btn { width: 100%; margin: 5px 0; padding: 10px; font-weight: bold; border-radius: 5px; cursor: pointer; border: 1px solid #ccc; background: #f8f8f8; }
+        #res-scr { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 2000; }
+    </style>
+</head>
+<body>
+
+<div class="game-container">
+    <div class="row">
+        <div class="zone stack-zone" id="z-a-heaven" data-label="AI天国"></div>
+        <div class="zone stack-zone" id="z-a-seisei" data-label="AI精誠"></div>
+        <div class="zone stack-zone" id="z-a-deck" data-label="AI山札"></div>
+    </div>
+    <div class="row">
+        <div class="zone stack-zone" id="z-a-wall" data-label="心の壁"></div>
+        <div class="zone stg-zone" id="z-a-stg" data-label="AIステージ"></div>
+    </div>
+    <div id="log-area">SR/MRは1枚制限。デッキの多様性が試されます。</div>
+    <div class="controls">
+        <div id="p-stats" style="flex:1; font-size:11px;"></div>
+        <button onclick="G.draw()" id="btn-draw" style="background:#1e88e5; color:white; font-weight:bold; padding:8px 12px; border:none; border-radius:4px;">ドロー</button>
+        <button onclick="G.endTurn()" style="background:#43a047; color:white; font-weight:bold; padding:8px 12px; border:none; border-radius:4px;">ターン終了</button>
+    </div>
+    <div class="row">
+        <div class="zone stg-zone" id="z-p-stg" data-label="自分ステージ"></div>
+        <div class="zone stack-zone" id="z-p-wall" data-label="心の壁"></div>
+    </div>
+    <div class="row">
+        <div class="zone hand-zone" id="z-p-hand" data-label="手札"></div>
+        <div class="zone stack-zone" id="z-p-seisei" data-label="精誠"></div>
+        <div class="zone stack-zone" id="z-p-deck" data-label="山札"></div>
+        <div class="zone stack-zone" id="z-p-heaven" data-label="天国"></div>
+    </div>
+</div>
+
+<div id="menu-box"></div>
+<div id="res-scr"><h1 id="res-title" style="font-size:3em; color:gold;"></h1><button onclick="location.reload()">リスタート</button></div>
+
+<script>
+const M = [
+    { n: "アダム", c: 1, p: 200, ms: 200, a: "木", r: "N" },
+    { n: "エバ", c: 2, p: 0, ms: 300, a: "炎", r: "R", skill: "EVA" },
+    { n: "レア", c: 1, p: 50, ms: 200, a: "木", r: "N", skill: "SIS" },
+    { n: "ラケル", c: 1, p: 50, ms: 200, a: "木", r: "N", skill: "SIS" },
+    { n: "ノア", c: 4, p: 700, ms: 1000, a: "水", r: "SR" },
+    { n: "ルーシェル", c: 6, p: 1000, ms: 1600, a: "闇", r: "MR", skill: "LUC" },
+    { n: "アブラハム", c: 6, p: 1000, ms: 1400, a: "水", r: "MR" }
+];
+
+const G = {
+    s: { pD:[], pH:[], pW:5, pS:[], pStg:[], pV:[], pU:0, aD:[], aH:[], aW:5, aS:[], aStg:[], aV:[], aU:0, cur:'p', hasD:false, hasSetS:false, isFirstT:true },
+    
+    // デッキ作成（レア度制限付き）
+    createDeck: function() {
+        let deck = [];
+        let counts = {};
+        while(deck.length < 20) {
+            let card = M[Math.floor(Math.random() * M.length)];
+            let limit = (card.r === "SR" || card.r === "MR") ? 1 : 2; // SR/MRは1枚、他は2枚
+            counts[card.n] = (counts[card.n] || 0);
+            if(counts[card.n] < limit) {
+                deck.push({...card, id:Math.random(), nowSg:0, done:false});
+                counts[card.n]++;
+            }
+        }
+        return deck.sort(() => Math.random() - 0.5);
+    },
+
+    init: function() {
+        this.s.pD = this.createDeck();
+        this.s.aD = this.createDeck();
+        this.s.pH = this.s.pD.splice(0,5);
+        this.s.aH = this.s.aD.splice(0,5);
+        this.up();
+    },
+
+    up: function() {
+        const rz = (id, cards, type) => {
+            const el = document.getElementById(id); el.innerHTML = "";
+            cards.forEach((c, i) => {
+                const div = document.createElement('div'); div.className = 'card' + (c.done?' done':'');
+                div.style.borderColor = c.a==='炎'?'#f52':c.a==='水'?'#29f':'#4c5';
+                div.innerHTML = `<div class="card-cost">${c.c}</div><div class="card-rare">${c.r}</div><div class="card-info"><b>${c.n}</b><br>SG:${c.nowSg}/${c.ms}<br>攻:${c.skill==='EVA'?'神嫁':c.p}</div>`;
+                div.onclick = () => G.openM(type, i); el.appendChild(div);
+            });
+        };
+        rz('z-p-hand', this.s.pH, 'hand'); rz('z-p-stg', this.s.pStg, 'stg'); rz('z-a-stg', this.s.aStg, 'stg');
+        const rzS = (id, count, label, isW) => {
+            const el = document.getElementById(id); el.innerHTML = "";
+            if(count <= 0 && !isW) return;
+            const div = document.createElement('div'); div.className = isW?'card wall-card':'card stack-top';
+            div.innerHTML = `<div style="margin-top:35px;">${label}</div><div class="stack-count">${count}</div>`;
+            el.appendChild(div);
+        };
+        rzS('z-p-deck', this.s.pD.length, '山札'); rzS('z-p-seisei', this.s.pS.length, '精誠');
+        rzS('z-p-wall', this.s.pW, '心の壁', true); rzS('z-p-heaven', this.s.pV.length, '天国');
+        rzS('z-a-deck', this.s.aD.length, '山札'); rzS('z-a-seisei', this.s.aS.length, '精誠');
+        rzS('z-a-wall', this.s.aW, '心の壁', true); rzS('z-a-heaven', this.s.aV.length, '天国');
+        document.getElementById('btn-draw').disabled = (this.s.cur!=='p'||this.s.hasD||this.s.isFirstT);
+        document.getElementById('p-stats').innerText = `精誠:${this.s.pS.length-this.s.pU}/${this.s.pS.length} 精誠権:${this.s.hasSetS?'済':'可'}`;
+    },
+
+    openM: function(t, i) {
+        if(this.s.cur!=='p') return;
+        const c = (t==='hand'?this.s.pH:this.s.pStg)[i]; if(!c) return;
+        let h = `<b>${c.n}</b><hr>`;
+        if(t==='hand'){
+            h += `<button class="m-btn" ${this.s.hasSetS?'disabled':''} onclick="G.setS(${i})">精誠へ捧げる</button>`;
+            h += `<button class="m-btn" ${this.s.pS.length-this.s.pU < c.c?'disabled':''} onclick="G.play(${i},${c.c})">展開 (コスト:${c.c})</button>`;
+        } else if(t==='stg' && !c.done){
+            if(c.skill==="EVA") {
+                if(this.s.aStg.length > 0) h += `<button class="m-btn" onclick="G.evaS(${i})">神の花嫁 (復帰)</button>`;
+                else h += `<button class="m-btn" onclick="G.atkW(${i})">神の花嫁 (壁サラン)</button>`;
+            } else {
+                if(this.s.aStg.length > 0) this.s.aStg.forEach((x,j)=> h += `<button class="m-btn" onclick="G.atk(${i},${j})">${x.n}へサラン</button>`);
+                else h += `<button class="m-btn" onclick="G.atkW(${i})">壁へサラン</button>`;
+            }
+        }
+        h += `<button class="m-btn" onclick="G.cls()">戻る</button>`;
+        const mb = document.getElementById('menu-box'); mb.innerHTML=h; mb.style.display='block';
+    },
+
+    setS: function(i) { this.s.pS.push(this.s.pH.splice(i,1)[0]); this.s.hasSetS=true; this.cls(); this.up(); },
+    play: function(i, cost) { this.s.pU+=cost; this.s.pStg.push(this.s.pH.splice(i,1)[0]); this.cls(); this.up(); },
+    draw: function() { if(this.s.pD.length>0 && !this.s.hasD){ this.s.pH.push(this.s.pD.pop()); this.s.hasD=true; this.up(); }},
+    cls: () => document.getElementById('menu-box').style.display='none',
+
+    atk: function(pi, ai) {
+        const a = this.s.pStg[pi], t = this.s.aStg[ai];
+        t.nowSg += a.p; a.done=true;
+        if(t.nowSg >= t.ms) this.s.aV.push(this.s.aStg.splice(ai,1)[0]);
+        this.cls(); this.up();
+    },
+
+    atkW: function(pi) {
+        this.s.pStg[pi].done=true;
+        if(this.s.aW > 0) {
+            this.s.aW--; if(this.s.aD.length>0) this.s.aH.push(this.s.aD.pop());
+            document.getElementById('log-area').innerText = "サラン成功！壁を削った。";
+        } else {
+            this.win("VICTORY");
+        }
+        this.cls(); this.up();
+    },
+
+    evaS: function(pi) {
+        let h = "<b>復帰対象を選択</b><hr>";
+        this.s.aStg.forEach((x,j)=> h += `<button class="m-btn" onclick="G.doEva(${pi},${j})">${x.n}</button>`);
+        document.getElementById('menu-box').innerHTML = h;
+    },
+    doEva: function(pi, ai) { this.s.aV.push(this.s.aStg.splice(ai,1)[0]); this.s.pStg[pi].done=true; this.cls(); this.up(); },
+
+    endTurn: function() { 
+        this.s.cur='a'; this.s.isFirstT=false; this.s.hasSetS=false; this.s.hasD=false; this.s.pU=0;
+        this.s.pStg.forEach(c=>c.done=false); this.up(); 
+        setTimeout(()=>this.aiT(), 800); 
+    },
+
+    aiT: function() {
+        if(this.s.aD.length>0) this.s.aH.push(this.s.aD.pop());
+        // 精誠 (コスト高優先)
+        if(this.s.aH.length > 0) {
+            this.s.aH.sort((a,b) => b.c - a.c);
+            this.s.aS.push(this.s.aH.shift());
+        }
+        // 展開
+        let avail = this.s.aS.length;
+        this.s.aH.sort((a,b) => b.c - a.c);
+        for(let i=0; i<this.s.aH.length; i++) {
+            if(this.s.aH[i].c <= avail) {
+                avail -= this.s.aH[i].c;
+                this.s.aStg.push(this.s.aH.splice(i,1)[0]);
+                i--;
+            }
+        }
+        this.up();
+        setTimeout(() => {
+            this.s.aStg.forEach(ac => {
+                if(ac.done) return;
+                if(ac.skill === "EVA") {
+                    if(this.s.pStg.length > 0) this.s.pV.push(this.s.pStg.shift());
+                    else this.aiAtkW(ac);
+                } else {
+                    if(this.s.pStg.length > 0) {
+                        let target = this.s.pStg[0]; target.nowSg += ac.p;
+                        if(target.nowSg >= target.ms) this.s.pV.push(this.s.pStg.shift());
+                    } else { this.aiAtkW(ac); }
+                }
+                ac.done = true;
+            });
+            this.s.aU = 0; this.s.aStg.forEach(c=>c.done=false);
+            this.s.cur='p'; this.up();
+        }, 800);
+    },
+
+    aiAtkW: function(ac) {
+        if(this.s.pW > 0) {
+            this.s.pW--; if(this.s.pD.length>0) this.s.pH.push(this.s.pD.pop());
+        } else { this.win("DEFEAT"); }
+    },
+
+    win: function(m) {
+        document.getElementById('res-scr').style.display = 'flex';
+        document.getElementById('res-title').innerText = m;
+    }
+};
+G.init();
+</script>
+</body>
+</html>
